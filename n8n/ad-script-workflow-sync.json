@@ -1,0 +1,83 @@
+{
+  "name": "Ad Script Refactor",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ad-script",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "ad-script"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENAI_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'system', content: 'You are an expert advertising copywriter. Improve the given script based on the desired outcome. Return ONLY valid JSON: {\"new_script\": \"improved script\", \"analysis\": \"brief explanation\"}' }, { role: 'user', content: 'Script: ' + ($json.body?.reference_script || $json.reference_script || '') + '\\n\\nOutcome: ' + ($json.body?.outcome_description || $json.outcome_description || '') }], temperature: 0.7 }) }}",
+        "options": {}
+      },
+      "id": "openai",
+      "name": "OpenAI Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const webhookData = $('Webhook').first().json;\nconst openaiResponse = $input.first().json;\n\nlet result;\ntry {\n  const content = openaiResponse.choices[0].message.content;\n  let jsonContent = content;\n  const match = content.match(/```(?:json)?\\s*([\\s\\S]*?)```/);\n  if (match) jsonContent = match[1].trim();\n  result = JSON.parse(jsonContent);\n} catch (e) {\n  result = {\n    new_script: openaiResponse.choices?.[0]?.message?.content || 'Failed',\n    analysis: 'AI response was not valid JSON'\n  };\n}\n\nreturn {\n  task_id: webhookData.body?.task_id || webhookData.task_id,\n  new_script: result.new_script,\n  analysis: result.analysis\n};"
+      },
+      "id": "parse",
+      "name": "Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1000, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "OpenAI Request", "type": "main", "index": 0}]]
+    },
+    "OpenAI Request": {
+      "main": [[{"node": "Parse", "type": "main", "index": 0}]]
+    },
+    "Parse": {
+      "main": [[{"node": "Respond", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "versionId": "2"
+}

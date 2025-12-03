@@ -1,0 +1,161 @@
+{
+  "info": {
+    "name": "Ad Script Refactor API",
+    "description": "API collection for the Ad Script Refactor Laravel + n8n integration",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8001",
+      "type": "string"
+    },
+    {
+      "key": "n8n_secret",
+      "value": "docker-shared-secret",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Tasks",
+      "item": [
+        {
+          "name": "Create Task",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference_script\": \"Buy now! Limited time offer! Don't miss out on this amazing deal! Call 1-800-BUYNOW!\",\n  \"outcome_description\": \"Make it more professional and less aggressive, suitable for B2B audience\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/ad-scripts",
+              "host": ["{{base_url}}"],
+              "path": ["api", "ad-scripts"]
+            },
+            "description": "Create a new ad script refactoring task. The task will be queued and processed by n8n AI Agent."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Task",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/ad-scripts/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "ad-scripts", "1"]
+            },
+            "description": "Get the status and details of a specific task by ID."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Webhooks (n8n Callbacks)",
+      "item": [
+        {
+          "name": "Task Result Callback (Success)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const payload = pm.request.body.raw;",
+                  "const secret = pm.variables.get('n8n_secret');",
+                  "const crypto = require('crypto-js');",
+                  "const signature = crypto.HmacSHA256(payload, secret).toString();",
+                  "pm.request.headers.add({key: 'X-N8N-Signature', value: signature});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"task_id\": 1,\n  \"new_script\": \"Discover our premium business solutions. Contact our team today to learn how we can help optimize your operations.\",\n  \"analysis\": \"The original script was too aggressive with multiple exclamation points and urgency tactics. The revised version maintains professionalism suitable for B2B communications while still conveying value.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/ad-scripts/1/result",
+              "host": ["{{base_url}}"],
+              "path": ["api", "ad-scripts", "1", "result"]
+            },
+            "description": "Callback endpoint for n8n to submit successful task results. Requires HMAC signature."
+          },
+          "response": []
+        },
+        {
+          "name": "Task Result Callback (Failure)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const payload = pm.request.body.raw;",
+                  "const secret = pm.variables.get('n8n_secret');",
+                  "const crypto = require('crypto-js');",
+                  "const signature = crypto.HmacSHA256(payload, secret).toString();",
+                  "pm.request.headers.add({key: 'X-N8N-Signature', value: signature});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"task_id\": 1,\n  \"error\": \"AI model timeout: The request took longer than 60 seconds to complete.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/ad-scripts/1/result",
+              "host": ["{{base_url}}"],
+              "path": ["api", "ad-scripts", "1", "result"]
+            },
+            "description": "Callback endpoint for n8n to report task failures. Requires HMAC signature."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

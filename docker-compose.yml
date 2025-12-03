@@ -1,0 +1,179 @@
+services:
+  laravel-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: laravel-app-v10
+    ports:
+      - "8001:8000"
+    volumes:
+      - .:/var/www/html
+      - /var/www/html/vendor
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - APP_URL=http://localhost:8001
+      - DB_CONNECTION=mysql
+      - DB_HOST=mysql-v10
+      - DB_PORT=3306
+      - DB_DATABASE=n8n_agents
+      - DB_USERNAME=laravel
+      - DB_PASSWORD=secret
+      - CACHE_STORE=database
+      - QUEUE_CONNECTION=database
+      - SESSION_DRIVER=file
+      - BROADCAST_CONNECTION=pusher
+      - PUSHER_APP_ID=2086411
+      - PUSHER_APP_KEY=c8f7e3c14455760d1638
+      - PUSHER_APP_SECRET=316e71a1a3a4d0307e42
+      - PUSHER_APP_CLUSTER=eu
+      - N8N_WEBHOOK_URL=http://n8n-v10:5678/webhook/ad-script
+      - N8N_SECRET=docker-shared-secret
+      - N8N_TIMEOUT=60
+    depends_on:
+      mysql-v10:
+        condition: service_healthy
+      redis-v10:
+        condition: service_healthy
+    networks:
+      - n8n-network-v10
+    command: >
+      sh -c "
+        composer install --no-interaction &&
+        php artisan key:generate --force &&
+        php artisan migrate --force &&
+        php artisan serve --host=0.0.0.0 --port=8000
+      "
+
+  queue-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: queue-worker-v10
+    volumes:
+      - .:/var/www/html
+      - /var/www/html/vendor
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - DB_CONNECTION=mysql
+      - DB_HOST=mysql-v10
+      - DB_PORT=3306
+      - DB_DATABASE=n8n_agents
+      - DB_USERNAME=laravel
+      - DB_PASSWORD=secret
+      - CACHE_STORE=database
+      - QUEUE_CONNECTION=database
+      - SESSION_DRIVER=file
+      - BROADCAST_CONNECTION=pusher
+      - PUSHER_APP_ID=2086411
+      - PUSHER_APP_KEY=c8f7e3c14455760d1638
+      - PUSHER_APP_SECRET=316e71a1a3a4d0307e42
+      - PUSHER_APP_CLUSTER=eu
+      - N8N_WEBHOOK_URL=http://n8n-v10:5678/webhook/ad-script
+      - N8N_SECRET=docker-shared-secret
+      - N8N_TIMEOUT=60
+    depends_on:
+      mysql-v10:
+        condition: service_healthy
+      redis-v10:
+        condition: service_healthy
+      laravel-app:
+        condition: service_started
+    networks:
+      - n8n-network-v10
+    command: php artisan queue:work --sleep=3 --tries=3
+
+  mysql-v10:
+    image: mysql:8.0
+    container_name: mysql-v10
+    ports:
+      - "3307:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootsecret
+      - MYSQL_DATABASE=n8n_agents
+      - MYSQL_USER=laravel
+      - MYSQL_PASSWORD=secret
+    volumes:
+      - mysql-data-v10:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootsecret"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - n8n-network-v10
+
+  redis-v10:
+    image: redis:7-alpine
+    container_name: redis-v10
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-data-v10:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - n8n-network-v10
+
+  n8n-v10:
+    image: n8nio/n8n:latest
+    container_name: n8n-v10
+    ports:
+      - "5679:5678"
+    environment:
+      - DB_TYPE=mysqldb
+      - DB_MYSQLDB_HOST=mysql-v10
+      - DB_MYSQLDB_PORT=3306
+      - DB_MYSQLDB_DATABASE=n8n
+      - DB_MYSQLDB_USER=laravel
+      - DB_MYSQLDB_PASSWORD=secret
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5679
+      - N8N_SHARED_SECRET=docker-shared-secret
+      - GENERIC_TIMEZONE=UTC
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-your-openai-api-key-here}
+    volumes:
+      - n8n-data-v10:/home/node/.n8n
+      - ./n8n:/home/node/workflows:ro
+    depends_on:
+      mysql-v10:
+        condition: service_healthy
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        n8n import:workflow --input=/home/node/workflows/ad-script-workflow-sync.json
+        n8n start
+    networks:
+      - n8n-network-v10
+
+  phpmyadmin-v10:
+    image: phpmyadmin:latest
+    container_name: phpmyadmin-v10
+    ports:
+      - "8881:80"
+    environment:
+      - PMA_HOST=mysql-v10
+      - PMA_USER=laravel
+      - PMA_PASSWORD=secret
+    depends_on:
+      mysql-v10:
+        condition: service_healthy
+    networks:
+      - n8n-network-v10
+
+volumes:
+  mysql-data-v10:
+  redis-data-v10:
+  n8n-data-v10:
+
+networks:
+  n8n-network-v10:
+    driver: bridge
